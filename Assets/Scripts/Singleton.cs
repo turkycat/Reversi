@@ -140,16 +140,84 @@ public class Singleton : MonoBehaviour
 
         if ( depth <= 0 || graph.IsFinished() )
         {
-            int score = graph.GetWhiteScore() - graph.GetBlackScore();
-            if( player == Player.BLACK ) score *= -1;
-            return new Move( null, score );
+            return new Move( null, graph.DetermineAdvantageFor( player ) );
         }
 
         //if we haven't reached the bottom of the traversal tree and the graph has possible moves, we need to check them further.
         HashSet<ReversiGraph.GridCell> moves = GetAllPossibleMoves( graph, player );
         Move bestMove = null;
 
-        //more code here
+        //we have moves available! that other guy is going down
+        if ( moves.Count > 0 )
+        {
+            foreach ( ReversiGraph.GridCell cell in moves )
+            {
+                //we need to duplicate our graph for the recursive call, so that our current board isn't maniplulated. luckily this is efficient
+                //because we don't copy all the edges in every graph clone, we use a lookup table for that.
+                ReversiGraph cloned = graph.Clone();
+
+                //perform the move on the cloned graph using the current player
+                performMove( cloned, graph.Cells[cell.Name], player );
+
+                //use recursion to determine the opponents next best move
+                Move opponentsBestMove = negamax( cloned, GetOppositePlayer( player ), -beta, -alpha, depth - 1 );
+
+                //we flip our opponents score, to determine how much we like it. if the move is better for us, we save it.
+                int score = -opponentsBestMove.Score;
+                if ( alpha < score )
+                {
+                    alpha = score;
+                    bestMove = new Move( cell.Name, score );
+                }
+
+                //this is the alpha beta pruning. If this statement evaluates to true, it means we cannot possibly find a more optimum move down the recursive tree in this direction
+                if ( alpha >= beta )
+                {
+                    return bestMove;
+                }
+            }
+        }
+
+        //if we have no moves available and given that the depth is above 0, it is the other player's turn
+        else
+        {
+            //check for the opposite player
+            moves = GetAllPossibleMoves( graph, GetOppositePlayer( player ) );
+
+            //our opponent is able to move
+            if ( moves.Count > 0 )
+            {
+                //we don't need to clone the graph, since we made no changes to it, so recursively call negamax as the opposite player
+                Move opponentsBestMove = negamax( graph, GetOppositePlayer( player ), -beta, -alpha, depth - 1 );
+
+                //we need to invert the returned move, since we want the opposite outcome as our opponent
+                bestMove = new Move( opponentsBestMove.Cell, -opponentsBestMove.Score );
+
+            }
+            //if no moves are available for him either, the game is over and we determine the winner
+            else
+            {
+                int difference = graph.DetermineAdvantageFor( player );
+
+                //if the advantage is positive, we win!
+                if ( difference > 0 )
+                {
+                    bestMove = new Move( null, Int32.MaxValue );
+                }
+                //tie game?
+                else if ( difference == 0 )
+                {
+                    bestMove = new Move( null, 0 );
+                }
+                //if we get a negative number, we will lose this game.
+                else
+                {
+                    bestMove = new Move( null, Int32.MinValue );
+                }
+            }
+        }
+
+        return bestMove;
     }
 
 
@@ -160,7 +228,7 @@ public class Singleton : MonoBehaviour
     {
         if ( given.State != ReversiGraph.CellState.EMPTY ) return false;
 
-        ReversiGraph.CellState seeking = getSeekingState( player );
+        ReversiGraph.CellState seeking = GetSeekingState( player );
 
         //loop through each possible direction to determine if a move is possible
         foreach ( Direction direction in (Direction[]) Enum.GetValues( typeof( Direction ) ) )
@@ -192,7 +260,7 @@ public class Singleton : MonoBehaviour
         HashSet<ReversiGraph.GridCell> flipsNeeded = new HashSet<ReversiGraph.GridCell>();
 
         //determine which color we are seeking
-        ReversiGraph.CellState seeking = getSeekingState( player );
+        ReversiGraph.CellState seeking = GetSeekingState( player );
 
         //loop through each possible direction and flip any necessary pieces
         foreach ( Direction direction in (Direction[]) Enum.GetValues( typeof( Direction ) ) )
@@ -227,9 +295,18 @@ public class Singleton : MonoBehaviour
     /**
      * returns the cell state we intend to find for traversals given the player that is performing the current move
      */
-    public ReversiGraph.CellState getSeekingState( Player player )
+    private ReversiGraph.CellState GetSeekingState( Player player )
     {
         return ( player == Player.WHITE ? ReversiGraph.CellState.WHITE : ReversiGraph.CellState.BLACK );
+    }
+
+
+    /**
+     * returns the cell state we intend to find for traversals given the player that is performing the current move
+     */
+    private Player GetOppositePlayer( Player player )
+    {
+        return player == Player.WHITE ? Player.BLACK : Player.WHITE;
     }
 
 
@@ -532,8 +609,23 @@ public class Singleton : MonoBehaviour
             return empty;
         }
 
+        
+        /**
+         * determines the advantage that the given player has over the opposite player
+         *  @returns the number of squares owned by the given player, less the number owned by the opposite player
+         */
+        public int DetermineAdvantageFor( Player player )
+        {
+            if ( dirty ) Examine();
+            int difference = white - black;
+            if ( player == Player.BLACK ) difference *= -1;
+            return difference;
+        }
 
-        #region Graph inner-classes; GridCell and Edge
+#endregion
+
+
+        #region Graph inner-class GridCell
 
         /**
          * this class represents an individual square on the board, more formally: V
@@ -608,7 +700,7 @@ public class Singleton : MonoBehaviour
                 //make sure to only shallow copy the list of edges, we'll use the graph this cell belongs to in order find the proper instance
                 this.edges = other.edges;
 
-                //we actually don't want to copy the model to any other graph but the main one
+                //we actually don't need to copy the model to any other graph but the main one
                 //this.model = other.model;
             }
 
@@ -643,40 +735,13 @@ public class Singleton : MonoBehaviour
                     }
                 }
             }
+        #endregion
         }
 
-        /**
-         * this class represents a connection to another square on the board, more formally: E
-         */
-        //public class Edge
-        //{
-        //    public Direction Direction
-        //    {
-        //        get;
-        //        private set;
-        //    }
-
-        //    public string Target
-        //    {
-        //        get;
-        //        private set;
-        //    }
-
-        //    public Edge( Direction dir, string target )
-        //    {
-        //        this.Direction = dir;
-        //        this.Target = target;
-        //    }
-
-
-        //}
-
-        #endregion
     }
 
 
     #endregion
-
 
     #region Move class
 
