@@ -27,7 +27,7 @@ public class Singleton : MonoBehaviour
 
     public static Singleton i;
 
-    private ReversiGraph graph;
+    private ReversiGraph gameGraph;
     private GameObject gamePiece;
     private Player currentTurn;
     private int aiDifficulty;
@@ -54,10 +54,10 @@ public class Singleton : MonoBehaviour
      */
     public void Start()
     {
-        graph = new ReversiGraph();
+		gameGraph = new ReversiGraph();
         gamePiece = (GameObject) Resources.Load( "piece_model" );
         currentTurn = Player.WHITE;
-        aiDifficulty = 5;
+        aiDifficulty = 3;
     }
 
     private bool debugTraversal = false;
@@ -65,7 +65,7 @@ public class Singleton : MonoBehaviour
     public void Debug()
     {
         debugTraversal = true;
-        foreach ( ReversiGraph.GridCell cell in graph.Cells.Values )
+		foreach ( ReversiGraph.GridCell cell in gameGraph.Cells.Values )
         {
             print( "name: " + cell.Name + " state: " + cell.State );
         }
@@ -77,16 +77,22 @@ public class Singleton : MonoBehaviour
      */
     public void itemClicked( string name )
     {
-        print( "DEBUG: " + name + " STATE: " + graph.Cells[name].State );
+        //print( "DEBUG: " + name + " STATE: " + graph.Cells[name].State );
+        if ( currentTurn == Player.BLACK ) return;
 
-        ReversiGraph.GridCell selected = graph.Cells[name];
+		ReversiGraph.GridCell selected = gameGraph.Cells[name];
 
-        //if ( isValidMove( selected, Player.WHITE ) )
-        if ( isValidMove( graph, selected, currentTurn ) )
+		if ( isValidMove( gameGraph, selected, Player.WHITE ) )
+        //if ( isValidMove( graph, selected, currentTurn ) )
         {
             print( "VALID YAY!" );
             //performMove( selected, Player.WHITE );
-            performMove( graph, selected, currentTurn );
+			performMove( gameGraph, selected, Player.WHITE );
+
+            //now process a move for the AI
+            currentTurn = Player.BLACK;
+			AIMove( gameGraph, Player.BLACK );
+            currentTurn = Player.WHITE;
         }
         else
         {
@@ -110,6 +116,7 @@ public class Singleton : MonoBehaviour
 
         //evaluate the moves and determine the best one
         Move bestMove = negamax( graph, player, Int32.MinValue, Int32.MaxValue, aiDifficulty );
+        performMove( graph, graph.Cells[bestMove.Cell], Player.BLACK );
     }
 
 
@@ -145,7 +152,7 @@ public class Singleton : MonoBehaviour
 
         //if we haven't reached the bottom of the traversal tree and the graph has possible moves, we need to check them further.
         HashSet<ReversiGraph.GridCell> moves = GetAllPossibleMoves( graph, player );
-        Move bestMove = null;
+        Move bestMove = new Move( null, alpha );
 
         //we have moves available! that other guy is going down
         if ( moves.Count > 0 )
@@ -157,10 +164,13 @@ public class Singleton : MonoBehaviour
                 ReversiGraph cloned = graph.Clone();
 
                 //perform the move on the cloned graph using the current player
-                performMove( cloned, graph.Cells[cell.Name], player );
+                performMove( cloned, cloned.Cells[cell.Name], player );
 
                 //use recursion to determine the opponents next best move
-                Move opponentsBestMove = negamax( cloned, GetOppositePlayer( player ), -beta, -alpha, depth - 1 );
+				Player oppPlayer = GetOppositePlayer( player );
+
+				//extra comment for debugging issue (monodevelop sucks)
+                Move opponentsBestMove = negamax( cloned, oppPlayer, -beta, -alpha, depth - 1 );
 
                 //we flip our opponents score, to determine how much we like it. if the move is better for us, we save it.
                 int score = -opponentsBestMove.Score;
@@ -254,7 +264,7 @@ public class Singleton : MonoBehaviour
     private void performMove( ReversiGraph graph, ReversiGraph.GridCell given, Player player )
     {
         if ( given.State != ReversiGraph.CellState.EMPTY ) return;
-        if ( currentTurn != player ) return;
+        //if ( currentTurn != player ) return;
 
         //instantiate a new hashset which will be used to keep track of any grid cells which need to be flipped as a result of this move
         HashSet<ReversiGraph.GridCell> flipsNeeded = new HashSet<ReversiGraph.GridCell>();
@@ -282,13 +292,14 @@ public class Singleton : MonoBehaviour
             cell.Flip();
         }
 
-        //place a piece at the current position
-        Quaternion rotation = ( player == Player.WHITE ? Quaternion.identity : new Quaternion( 0f, 0f, 3.1415f, 0f ) );
-        GameObject newPiece = (GameObject) Instantiate( gamePiece, given.SpawnPoint, rotation );
-        given.State = seeking;
-        given.Model = newPiece;
-
-        currentTurn = ( currentTurn == Player.WHITE ? Player.BLACK : Player.WHITE );
+        //place a piece at the current position, only if we are working with the actual game board
+		if (gameGraph == graph)
+		{
+			Quaternion rotation = (player == Player.WHITE ? Quaternion.identity : new Quaternion (0f, 0f, 3.1415f, 0f));
+			GameObject newPiece = (GameObject)Instantiate (gamePiece, given.SpawnPoint, rotation);
+			given.State = seeking;
+			given.Model = newPiece;
+		}
     }
 
 

@@ -1,0 +1,11 @@
+C:\Users\turkycat\Google Drive\Source\Unity\ComS437_Reversi\Temp\bin\Debug\Assembly-CSharp.dll
+C:\Users\turkycat\Google Drive\Source\Unity\ComS437_Reversi\Temp\bin\Debug\Assembly-CSharp.pdb
+C:\Users\turkycat\Google Drive\Source\Unity\ComS437_Reversi\Temp\bin\Debug\UnityEditor.dll
+C:\Users\turkycat\Google Drive\Source\Unity\ComS437_Reversi\Temp\bin\Debug\UnityEngine.dll
+C:\Users\turkycat\Google Drive\Source\Unity\ComS437_Reversi\Temp\bin\Debug\Mono.Cecil.dll
+C:\Users\turkycat\Google Drive\Source\Unity\ComS437_Reversi\Temp\bin\Debug\nunit.framework.dll
+C:\Users\turkycat\Google Drive\Source\Unity\ComS437_Reversi\Temp\bin\Debug\Unity.DataContract.dll
+C:\Users\turkycat\Google Drive\Source\Unity\ComS437_Reversi\Temp\bin\Debug\ICSharpCode.NRefactory.dll
+C:\Users\turkycat\Google Drive\Source\Unity\ComS437_Reversi\obj\Debug\Assembly-CSharp-vs.csprojResolveAssemblyReference.cache
+C:\Users\turkycat\Google Drive\Source\Unity\ComS437_Reversi\obj\Debug\Assembly-CSharp.dll
+C:\Users\turkycat\Google Drive\Source\Unity\ComS437_Reversi\obj\Debug\Assembly-CSharp.pdb
