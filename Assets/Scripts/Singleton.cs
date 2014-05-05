@@ -31,6 +31,10 @@ public class Singleton : MonoBehaviour
     private GameObject gamePiece;
     private Player currentTurn;
     private int aiDifficulty;
+    private bool aiThinking;
+    private bool aiMoveReady;
+    private bool aiVSai;
+    private bool gameover;
 
     /**
      * presumably, this method is called when the GameObject it is attached to is brought to life in a scene
@@ -58,7 +62,94 @@ public class Singleton : MonoBehaviour
         gamePiece = (GameObject) Resources.Load( "piece_model" );
         currentTurn = Player.WHITE;
         aiDifficulty = 3;
+        aiMoveReady = false;
+        aiVSai = false;
+        gameover = false;
     }
+
+
+
+    void OnGUI()
+    {
+        //Rect whiteScoreText = new Rect( 0f, 0f, 5f, 5f );
+        //GUI.Label( whiteScoreText, "White:" );
+        // Make a background box
+        GUI.Box( new Rect( 10, 10, 100, 330 ), "AI Difficulty" );
+
+        for ( int i = 1; i <= 10; ++i )
+        {
+            //Make buttons for AI Levels
+            if ( GUI.Button( new Rect( 20, 10 + ( 30 * i ), 80, 20 ), "Level " + i ) )
+            {
+                aiDifficulty = i;
+            }
+        }
+
+
+        GUI.Box( new Rect( 700, 10, 160, 90 ), "Game Mode: " );
+        //Make buttons for AI Levels
+        if ( GUI.Button( new Rect( 710, 40, 140, 20 ), "Single Player " ) )
+        {
+            aiVSai = false;
+        }
+        //Make buttons for AI Levels
+        if ( GUI.Button( new Rect( 710, 70, 140, 20 ), "AI vs AI" ) )
+        {
+            aiVSai = true;
+        }
+
+        bool gamefin = IsGameFinished();
+
+
+        GUI.Box( new Rect( 150, 10, 160, 330 ), "Game Status:" );
+        GUI.Label( new Rect( 160, 70, 130, 30 ), "White: " + gameGraph.GetWhiteScore() );
+        GUI.Label( new Rect( 160, 90, 130, 30 ), "Black: " + gameGraph.GetBlackScore() );
+        GUI.Label( new Rect( 160, 110, 130, 30 ), "Current Turn: " + currentTurn );
+        GUI.Label( new Rect( 160, 130, 130, 30 ), "AI Difficulty: " + aiDifficulty );
+
+        if ( !gamefin && ( currentTurn == Player.BLACK || aiVSai ) )
+        {
+            GUI.Label( new Rect( 180, 150, 130, 30 ), "AI Thinking... " );
+
+            if ( !aiMoveReady )
+            {
+                aiMoveReady = true;
+            }
+        }
+
+        if ( gamefin )
+        {
+            int white = gameGraph.GetWhiteScore();
+            int black = gameGraph.GetBlackScore();
+
+            if( white == black )
+            {
+                GUI.Label( new Rect( 180, 250, 130, 30 ), "tie game!" );
+            }
+            else
+            {
+                GUI.Label( new Rect( 180, 250, 130, 30 ), "" + ( white > black ? "White " : "Black " ) + "wins!" );
+            }
+        }
+    }
+
+
+    public void Update()
+    {
+        if ( IsGameFinished() ) return;
+
+        if ( aiMoveReady )
+        {
+            //begin finding the best move using negamax
+            AIMove( gameGraph, currentTurn );
+
+            //turn finished, set it back to white
+            currentTurn = GetOppositePlayer( currentTurn );
+
+            aiMoveReady = false;
+        }
+    }
+
 
     private bool debugTraversal = false;
 
@@ -69,6 +160,7 @@ public class Singleton : MonoBehaviour
         {
             print( "name: " + cell.Name + " state: " + cell.State );
         }
+        print( "white: " + gameGraph.GetWhiteScore() + " black: " + gameGraph.GetBlackScore() + " empty: " + gameGraph.GetEmptyCount() );
     }
 
 
@@ -77,6 +169,8 @@ public class Singleton : MonoBehaviour
      */
     public void itemClicked( string name )
     {
+        if ( aiVSai ) return;
+
         //print( "DEBUG: " + name + " STATE: " + graph.Cells[name].State );
         if ( currentTurn == Player.BLACK ) return;
 
@@ -91,8 +185,6 @@ public class Singleton : MonoBehaviour
 
             //now process a move for the AI
             currentTurn = Player.BLACK;
-			AIMove( gameGraph, Player.BLACK );
-            currentTurn = Player.WHITE;
         }
         else
         {
@@ -109,14 +201,11 @@ public class Singleton : MonoBehaviour
     private void AIMove( ReversiGraph graph, Player player )
     {
         //verify it is this player's turn
-        if ( currentTurn != player ) return;
-
-        //get a list of all possible moves
-        HashSet<ReversiGraph.GridCell> moves = GetAllPossibleMoves( graph, player );
+        if ( currentTurn != player || IsGameFinished() ) return;
 
         //evaluate the moves and determine the best one
         Move bestMove = negamax( graph, player, Int32.MinValue, Int32.MaxValue, aiDifficulty );
-        performMove( graph, graph.Cells[bestMove.Cell], Player.BLACK );
+        performMove( graph, graph.Cells[bestMove.Cell], player );
     }
 
 
@@ -318,6 +407,29 @@ public class Singleton : MonoBehaviour
     private Player GetOppositePlayer( Player player )
     {
         return player == Player.WHITE ? Player.BLACK : Player.WHITE;
+    }
+
+
+    /**
+     * returns the true if the game is finished
+     */
+    public bool IsGameFinished()
+    {
+        if ( gameover ) return true;
+
+        //the gameGraph can quickly determine if it is in a final state
+        if ( gameGraph.IsFinished() )
+        {
+            gameover = true;
+        }
+        
+        //otherwise we resort to scouring the graph twice to see if there are no more moves possible
+        else if( ( GetAllPossibleMoves( gameGraph, Player.WHITE ).Count < 1 ) && ( GetAllPossibleMoves( gameGraph, Player.BLACK ).Count < 1 ) ) 
+        {
+            gameover = true;
+        }
+
+        return gameover;
     }
 
 
