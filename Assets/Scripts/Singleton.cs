@@ -127,13 +127,7 @@ public class Singleton : MonoBehaviour
             int thinkingTime = (int)( Time.time - aiStartTime );
             int minutes = thinkingTime / 60;
             int seconds = thinkingTime % 60;
-            //string time = String.Format( "time: ( %f.0:%
             GUI.Label( new Rect( 180, 170, 130, 30 ), "Time: " + minutes.ToString( "n0" ) + ":" + ( seconds < 10f ? "0" : "" ) + seconds.ToString( "n0" ) );
-
-            //if ( !aiMoveReady )
-            //{
-            //    aiMoveReady = true;
-            //}
         }
 
         if ( gamefin )
