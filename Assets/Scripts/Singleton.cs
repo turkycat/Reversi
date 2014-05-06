@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System;
+using System.Threading;
 
 public class Singleton : MonoBehaviour
 {
@@ -31,10 +32,15 @@ public class Singleton : MonoBehaviour
     private GameObject gamePiece;
     private Player currentTurn;
     private int aiDifficulty;
+    private float aiStartTime;
     private bool aiThinking;
     private bool aiMoveReady;
     private bool aiVSai;
     private bool gameover;
+
+    private delegate Move Search( ReversiGraph graph, Player player, int alpha, int beta, int depth );
+    private Search currentSearchingTask;
+    IAsyncResult bestMove;
 
     /**
      * presumably, this method is called when the GameObject it is attached to is brought to life in a scene
@@ -65,6 +71,7 @@ public class Singleton : MonoBehaviour
         aiMoveReady = false;
         aiVSai = false;
         gameover = false;
+        aiThinking = false;
     }
 
 
@@ -91,11 +98,16 @@ public class Singleton : MonoBehaviour
         if ( GUI.Button( new Rect( 710, 40, 140, 20 ), "Single Player " ) )
         {
             aiVSai = false;
+            if ( currentTurn == Player.WHITE && aiThinking )
+            {
+                aiThinking = false;
+            }
         }
         //Make buttons for AI Levels
         if ( GUI.Button( new Rect( 710, 70, 140, 20 ), "AI vs AI" ) )
         {
             aiVSai = true;
+            aiMoveReady = true;
         }
 
         bool gamefin = IsGameFinished();
@@ -107,14 +119,21 @@ public class Singleton : MonoBehaviour
         GUI.Label( new Rect( 160, 110, 130, 30 ), "Current Turn: " + currentTurn );
         GUI.Label( new Rect( 160, 130, 130, 30 ), "AI Difficulty: " + aiDifficulty );
 
-        if ( !gamefin && ( currentTurn == Player.BLACK || aiVSai ) )
+        //if ( !gamefin && ( currentTurn == Player.BLACK || aiVSai ) )
+        if( aiThinking )
         {
             GUI.Label( new Rect( 180, 150, 130, 30 ), "AI Thinking... " );
 
-            if ( !aiMoveReady )
-            {
-                aiMoveReady = true;
-            }
+            int thinkingTime = (int)( Time.time - aiStartTime );
+            int minutes = thinkingTime / 60;
+            int seconds = thinkingTime % 60;
+            //string time = String.Format( "time: ( %f.0:%
+            GUI.Label( new Rect( 180, 170, 130, 30 ), "Time: " + minutes.ToString( "n0" ) + ":" + ( seconds < 10f ? "0" : "" ) + seconds.ToString( "n0" ) );
+
+            //if ( !aiMoveReady )
+            //{
+            //    aiMoveReady = true;
+            //}
         }
 
         if ( gamefin )
@@ -138,15 +157,30 @@ public class Singleton : MonoBehaviour
     {
         if ( IsGameFinished() ) return;
 
-        if ( aiMoveReady )
+        if ( aiThinking )
         {
-            //begin finding the best move using negamax
-            AIMove( gameGraph, currentTurn );
+            print( "AI is thinking" );
+            if ( bestMove.IsCompleted )
+            {
 
-            //turn finished, set it back to white
-            currentTurn = GetOppositePlayer( currentTurn );
+                //async result completed, retrieve the result by ending the task on our delegate
+                Move best = currentSearchingTask.EndInvoke( bestMove );
 
-            aiMoveReady = false;
+                //perform the move for the current player
+                performMove( gameGraph, gameGraph.Cells[best.Cell], currentTurn );
+
+                //turn finished, set it back to white
+                aiThinking = false;
+                currentTurn = GetOppositePlayer( currentTurn );
+
+                if ( aiVSai ) aiMoveReady = true;
+            }
+        }
+
+        else if ( aiMoveReady )
+        {
+            //begin finding the best move using negamax asyncronously
+            AsyncronousAIMove( gameGraph, currentTurn );
         }
     }
 
@@ -169,22 +203,17 @@ public class Singleton : MonoBehaviour
      */
     public void itemClicked( string name )
     {
-        if ( aiVSai ) return;
-
-        //print( "DEBUG: " + name + " STATE: " + graph.Cells[name].State );
-        if ( currentTurn == Player.BLACK ) return;
+        if ( aiVSai || currentTurn == Player.BLACK ) return;
 
 		ReversiGraph.GridCell selected = gameGraph.Cells[name];
 
 		if ( isValidMove( gameGraph, selected, Player.WHITE ) )
-        //if ( isValidMove( graph, selected, currentTurn ) )
         {
-            print( "VALID YAY!" );
-            //performMove( selected, Player.WHITE );
 			performMove( gameGraph, selected, Player.WHITE );
 
             //now process a move for the AI
             currentTurn = Player.BLACK;
+            aiMoveReady = true;
         }
         else
         {
@@ -198,14 +227,30 @@ public class Singleton : MonoBehaviour
     /**
      * uses the AI to decide a move for the given player
      */
-    private void AIMove( ReversiGraph graph, Player player )
+    private void AsyncronousAIMove( ReversiGraph graph, Player player )
     {
         //verify it is this player's turn
         if ( currentTurn != player || IsGameFinished() ) return;
 
         //evaluate the moves and determine the best one
-        Move bestMove = negamax( graph, player, Int32.MinValue, Int32.MaxValue, aiDifficulty );
-        performMove( graph, graph.Cells[bestMove.Cell], player );
+        //Func<ReversiGraph, Player, int, int, int, Move> searcher = ( ReversiGraph g, Player p, int a, int b, int diff ) => negamax( graph, player, Int32.MinValue, Int32.MaxValue, aiDifficulty )
+
+        //make sure to toggle the states properly so that we don't accidentally start another async task
+        aiMoveReady = false;
+        aiThinking = true;
+
+        //set up our delegate instance
+        currentSearchingTask = ( ( ReversiGraph g, Player p, int a, int b, int ai ) => negamax( g, p, a, b, ai ) );
+
+        //set our AI start time
+        aiStartTime = Time.time;
+
+        //invoke the delegate asyncronously and store the reference to the AsyncResult used to retrieve the result
+        bestMove = currentSearchingTask.BeginInvoke( graph, player, Int32.MinValue, Int32.MaxValue, aiDifficulty, null, null );
+
+
+        //Move bestMove = negamax( graph, player, Int32.MinValue, Int32.MaxValue, aiDifficulty );
+        //performMove( graph, graph.Cells[bestMove.Cell], player );
     }
 
 
@@ -246,6 +291,9 @@ public class Singleton : MonoBehaviour
         //we have moves available! that other guy is going down
         if ( moves.Count > 0 )
         {
+            //to add an element of randomness, I'm going to alter this algorithm to give the AI a way to randomly choose between equal moves
+            ArrayList bestMoves = new ArrayList();
+
             foreach ( ReversiGraph.GridCell cell in moves )
             {
                 //we need to duplicate our graph for the recursive call, so that our current board isn't maniplulated. luckily this is efficient
@@ -267,6 +315,14 @@ public class Singleton : MonoBehaviour
                 {
                     alpha = score;
                     bestMove = new Move( cell.Name, score );
+
+                    //storing a list of equal moves will give us an element of randomness. we still store bestMove though in the event of pruning
+                    bestMoves.Clear();
+                    bestMoves.Add( bestMove );
+                }
+                else if ( alpha == score )
+                {
+                    bestMoves.Add( new Move( cell.Name, score ) );
                 }
 
                 //this is the alpha beta pruning. If this statement evaluates to true, it means we cannot possibly find a more optimum move down the recursive tree in this direction
@@ -274,6 +330,12 @@ public class Singleton : MonoBehaviour
                 {
                     return bestMove;
                 }
+            }
+
+            if ( bestMoves.Count > 1 )
+            {
+                //bestMove = (Move) bestMoves[UnityEngine.Random.Range( 0, bestMoves.Count - 1 )];
+                bestMove = (Move) bestMoves[ new System.Random().Next( bestMoves.Count ) ];
             }
         }
 
@@ -378,7 +440,7 @@ public class Singleton : MonoBehaviour
         //go through and flip each of the cells which need to be flipped
         foreach ( ReversiGraph.GridCell cell in flipsNeeded )
         {
-            cell.Flip();
+            cell.Flip( graph == gameGraph );
         }
 
         //place a piece at the current position, only if we are working with the actual game board
@@ -835,7 +897,7 @@ public class Singleton : MonoBehaviour
             /**
              * inverts the cell's state from one player to the other and modified the model to match the owning player
              */
-            public void Flip()
+            public void Flip( bool models )
             {
                 if ( State == CellState.EMPTY )
                 {
@@ -844,7 +906,7 @@ public class Singleton : MonoBehaviour
                 else if ( State == ReversiGraph.CellState.WHITE )
                 {
                     State = ReversiGraph.CellState.BLACK;
-                    if ( model != null )
+                    if ( models )
                     {
                         model.transform.rotation = new Quaternion( 0f, 0f, 3.1415f, 0f );
                     }
@@ -852,7 +914,7 @@ public class Singleton : MonoBehaviour
                 else
                 {
                     State = ReversiGraph.CellState.WHITE;
-                    if ( model != null )
+                    if ( models )
                     {
                         model.transform.rotation = Quaternion.identity;
                     }
